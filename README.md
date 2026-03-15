@@ -86,7 +86,7 @@ python main.py [COMMAND] [OPTIONS]
 ##### For nrer.exe
 
 ```bash
-.\\nrer.exe [COMMAND] [OPTIONS]
+nrer.exe [COMMAND] [OPTIONS]
 ```
 
 #### Commands
@@ -356,7 +356,7 @@ python main.py [КОМАНДА] [ОПЦИИ]
 ##### Для nrer.exe
 
 ```bash
-.\\nrer.exe [КОМАНДА] [ОПЦИИ]
+nrer.exe [КОМАНДА] [ОПЦИИ]
 ```
 
 #### Команды
