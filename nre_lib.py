@@ -54,9 +54,10 @@ def calc_loo_error_parallel(c, x, y, s, k_name, pool):
 	errors = pool.map(_loo_unit, tasks)
 	return sum(errors) / n
 
-def predict_nre(x_target, x_train, y_train, stds, c, k_func):
+def predict_nre(x_target, x_train, y_train, stds, c, k_func, disable_nodata):
 	c = np.array(c)
 	diffs = (x_target - x_train) / (c * stds)
 	weights = np.prod(k_func(diffs), axis=-1)
 	sw = np.sum(weights)
-	return np.sum(weights * y_train) / sw if sw > 1e-15 else np.mean(y_train)
+	nodata = np.mean(y_train) if disable_nodata else None
+	return np.sum(weights * y_train) / sw if sw > 1e-15 else nodata

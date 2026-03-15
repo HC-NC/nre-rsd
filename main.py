@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import sys
+import math
 import numpy as np
 import pandas as pd
 import rasterio
@@ -33,6 +34,7 @@ STRINGS = {
 		'h_input': 'Путь к исходному GeoTIFF файлу',
 		'h_lang': 'Установка языка интерфейса (ru/en)',
 		'h_tile': 'Размер тайла для обработки',
+		'h_nodata': 'Заменяет отсутствующие значения средним значением',
 		'msg_opt': 'Запуск многоядерной оптимизации...',
 		'msg_apply': 'Обработка изображения...',
 		'err_chan': 'Ошибка: Количество каналов в TIFF ({}) не совпадает с данными модели ({})!',
@@ -57,6 +59,7 @@ STRINGS = {
 		'h_input': 'Path to source GeoTIFF file',
 		'h_lang': 'Set interface language (ru/en)',
 		'h_tile': 'Processing tile size',
+		'h_nodata': 'Replaces nodata values with the mean value',
 		'msg_opt': 'Starting multi-core optimization...',
 		'msg_apply': 'Processing image...',
 		'err_chan': 'Error: TIFF channels count ({}) does not match model data ({})!',
@@ -88,14 +91,14 @@ def get_txt(key):
 # --- Глобальные функции для Pool при Apply ---
 _APPLY_DATA = None
 
-def _init_apply_worker(x, y, s, c, k_name):
+def _init_apply_worker(x, y, s, c, k_name, disable_nodata):
     global _APPLY_DATA
     # Используем библиотечную функцию для получения объекта функции по имени
-    _APPLY_DATA = (x, y, s, c, nre_lib.get_kernel_func(k_name))
+    _APPLY_DATA = (x, y, s, c, nre_lib.get_kernel_func(k_name), disable_nodata)
 
 def _apply_unit(chunk):
-	x_t, y_t, s_t, c_t, k_f = _APPLY_DATA
-	return [nre_lib.predict_nre(p, x_t, y_t, s_t, c_t, k_f) for p in chunk]
+	x_t, y_t, s_t, c_t, k_f, disable_nodata = _APPLY_DATA
+	return [nre_lib.predict_nre(p, x_t, y_t, s_t, c_t, k_f, disable_nodata) for p in chunk]
 
 class NRERApp:
 	def __init__(self):
@@ -110,7 +113,7 @@ class NRERApp:
 
 		# --- Команда TRAIN ---
 		tr = subparsers.add_parser('train', help=get_txt('h_train'), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-		tr.add_argument('-d', '--data', required=True, help=get_txt('h_data'))
+		tr.add_argument('data', help=get_txt('h_data'))
 		tr.add_argument('-m', '--mode', choices=['single', 'multi'], default='single', help=get_txt('h_mode'))
 		tr.add_argument('-k', '--kernel', default='epanechnikov', choices=nre_lib.get_kernels(), help=get_txt('h_kern'))
 		tr.add_argument('-s', '--steps', type=int, default=100, help=get_txt('h_step'))
@@ -119,20 +122,22 @@ class NRERApp:
 
 		# --- Команда APPLY ---
 		ap = subparsers.add_parser('apply', help=get_txt('h_apply'), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-		ap.add_argument('-i', '--input', required=True, help=get_txt('h_input'))
-		ap.add_argument('-m', '--model', required=True, help=get_txt('h_model'))
+		ap.add_argument('input', help=get_txt('h_input'))
+		ap.add_argument('model', help=get_txt('h_model'))
 		ap.add_argument('-c', '--crop', type=float, default=1.0, help=get_txt('h_crop'))
 		ap.add_argument('-p', '--proc', type=int, default=conf['proc'], help=get_txt('h_proc'))
 		ap.add_argument('-t', '--tile', type=int, default=10000, help=get_txt('h_tile'))
 		ap.add_argument('-o', '--output', default='result.tif', help=get_txt('h_out'))
+		ap.add_argument('--disable-nodata', action='store_true', help=get_txt('h_nodata'))
 
 		# --- Команда PLOT ---
 		pl = subparsers.add_parser('plot', help=get_txt('h_plot'))
-		pl.add_argument('-m', '--model', required=True, help=get_txt('h_model'))
+		pl.add_argument('model', help=get_txt('h_model'))
+		pl.add_argument('--disable-nodata', action='store_true', help=get_txt('h_nodata'))
 
 		# --- Команда VIEW ---
 		vi = subparsers.add_parser('view', help=get_txt('h_view'))
-		vi.add_argument('-i', '--input', required=True, help=get_txt('h_input'))
+		vi.add_argument('input', help=get_txt('h_input'))
 
 		# --- Команда CONFIG ---
 		cf = subparsers.add_parser('config', help=get_txt('h_config'))
@@ -172,29 +177,39 @@ class NRERApp:
 
 		# Метрики
 		y_pred = np.array([nre_lib.predict_nre(pt, x, y, stds, best_c, k_func) for pt in x])
-		r2 = 1 - (np.sum((y - y_pred)**2) / np.sum((y - np.mean(y))**2))
-		ks_p = ks_2samp(y, y_pred).pvalue
+		ss_res = np.sum((y - y_pred)**2)
+		ss_tot = np.sum((y - np.mean(y))**2)
+		r2 = 1 - (ss_res / ss_tot)
+		rmse = math.sqrt(ss_res / len(y))
+		ks_stat, ks_p = ks_2samp(y, y_pred)
 
 		model_data = {
-			"data": os.path.abspath(args.data), "best_c": best_c, "kernel": args.kernel,
-			"chan_count": x.shape[1], "r2": r2, "ks_p": ks_p
+			"data": os.path.abspath(args.data), 
+			"best_c": best_c, 
+			"kernel": args.kernel,
+			"band_count": x.shape[1], 
+			"r2": r2, 
+			"rmse": rmse,
+			"ks_stat": ks_stat, 
+			"ks_p": ks_p,
+			"status": "Reliable" if ks_p > 0.05 else "Distributions differ"
 		}
-		with open(args.output, 'w') as f: json.dump(model_data, f, indent=4)
-		print(f"R2: {r2:.4f}, KS p-value: {ks_p:.4f}")
+		with open(args.output, 'w', encoding='utf-8') as f: json.dump(model_data, f, indent=4, ensure_ascii=False)
+		print(f"R2: {r2:.4f}, RMSE: {rmse:.4f}, KS p-value: {ks_p:.4f}")
 		print(get_txt('done'))
 
 	def cmd_apply(self, args):
 		if not os.path.exists(args.model):
 			print(get_txt('err_file').format(args.model)); return
 			
-		with open(args.model, 'r') as f: m = json.load(f)
+		with open(args.model, 'r', encoding='utf-8') as f: m = json.load(f)
 		df = pd.read_excel(m['data'])
 		y_t, x_t = df['Y'].values, df.drop(columns=['Y']).values
 		stds_t = np.std(x_t, axis=0); stds_t[stds_t == 0] = 1.0
 
 		with rasterio.open(args.input) as src:
-			if src.count != m['chan_count']:
-				print(get_txt('err_chan').format(src.count, m['chan_count'])); return
+			if src.count != m['band_count']:
+				print(get_txt('err_chan').format(src.count, m['band_count'])); return
 
 			meta = src.meta.copy()
 			if args.crop < 1.0:
@@ -211,7 +226,7 @@ class NRERApp:
 				data = src.read(window=win).reshape(src.count, -1).T
 				chunks = [data[i:i+args.tile] for i in range(0, len(data), args.tile)]
 				
-				with Pool(args.proc, _init_apply_worker, (x_t, y_t, stds_t, m['best_c'], m['kernel'])) as p:
+				with Pool(args.proc, _init_apply_worker, (x_t, y_t, stds_t, m['best_c'], m['kernel'], args.disable_nodata)) as p:
 					results = list(tqdm(p.imap(_apply_unit, chunks), total=len(chunks)))
 				
 				res_img = np.concatenate(results).reshape(h, w).astype('float32')
@@ -219,7 +234,7 @@ class NRERApp:
 		print(get_txt('done'))
 
 	def cmd_plot(self, args):
-		with open(args.model, 'r') as f: m = json.load(f)
+		with open(args.model, 'r', encoding='utf-8') as f: m = json.load(f)
 		df = pd.read_excel(m['data'])
 		y, x = df['Y'].values, df.drop(columns=['Y']).values
 		stds, c = np.std(x, axis=0), np.array(m['best_c'])
@@ -233,7 +248,7 @@ class NRERApp:
 			line_y = []
 			for v in line_x:
 				pt = x_fix.copy(); pt[i] = v
-				line_y.append(nre_lib.predict_nre(pt, x, y, stds, c, k_f))
+				line_y.append(nre_lib.predict_nre(pt, x, y, stds, c, k_f, args.disable_nodata))
 			axes[i].scatter(x[:,i], y, alpha=0.2, s=5, color='gray')
 			axes[i].plot(line_x, line_y, color='red')
 			axes[i].set_title(f"Channel {i+1}")
