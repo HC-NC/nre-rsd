@@ -54,7 +54,7 @@ def calc_loo_error_parallel(c, x, y, s, k_name, pool):
 	errors = pool.map(_loo_unit, tasks)
 	return sum(errors) / n
 
-def predict_nre(x_target, x_train, y_train, stds, c, k_func, disable_nodata):
+def predict_nre(x_target, x_train, y_train, stds, c, k_func, disable_nodata=False):
 	c = np.array(c)
 	diffs = (x_target - x_train) / (c * stds)
 	weights = np.prod(k_func(diffs), axis=-1)

@@ -8,6 +8,7 @@ import pandas as pd
 import rasterio
 import matplotlib.pyplot as plt
 from rasterio.windows import Window
+import multiprocessing
 from multiprocessing import Pool
 from tqdm import tqdm
 from scipy.stats import ks_2samp
@@ -92,9 +93,9 @@ def get_txt(key):
 _APPLY_DATA = None
 
 def _init_apply_worker(x, y, s, c, k_name, disable_nodata):
-    global _APPLY_DATA
-    # Используем библиотечную функцию для получения объекта функции по имени
-    _APPLY_DATA = (x, y, s, c, nre_lib.get_kernel_func(k_name), disable_nodata)
+	global _APPLY_DATA
+	# Используем библиотечную функцию для получения объекта функции по имени
+	_APPLY_DATA = (x, y, s, c, nre_lib.get_kernel_func(k_name), disable_nodata)
 
 def _apply_unit(chunk):
 	x_t, y_t, s_t, c_t, k_f, disable_nodata = _APPLY_DATA
@@ -265,5 +266,18 @@ class NRERApp:
 		save_config(conf)
 		print(get_txt('done'))
 
+def resource_path(relative_path):
+	""" Получает абсолютный путь к ресурсам, работает для dev и для PyInstaller """
+	try:
+		# PyInstaller создает временную папку _MEIPASS
+		base_path = sys._MEIPASS
+	except Exception:
+		base_path = os.path.abspath(".")
+	return os.path.join(base_path, relative_path)
+
 if __name__ == "__main__":
+	# 1. ОБЯЗАТЕЛЬНО для работы multiprocessing в EXE
+	multiprocessing.freeze_support()
+	
+	# 2. Запуск приложения
 	NRERApp().run()
