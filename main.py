@@ -1,104 +1,123 @@
 import pandas as pd
 import numpy as np
+import argparse
+import math
+import json
 from multiprocessing import Pool
 from tqdm import tqdm
-import math
+from scipy.stats import ks_2samp
 
 # Константы
 SQRT5 = math.sqrt(5)
-DATA_PATH = "1.xlsx"
-BLUR_COEF_OPT_COLUMNS = ["C", "W(c)"]
 
-# Глобальная переменная для дочерних процессов
-sample = None
+# Глобальные переменные для дочерних процессов
+x_train = None
+y_train = None
+train_stds = None
 
-def init_worker(shared_df):
-    """Эта функция вызывается при старте каждого процесса в Pool"""
-    global sample
-    sample = shared_df
+def init_worker(x_p, y_p, s_p):
+    global x_train, y_train, train_stds
+    x_train = x_p
+    y_train = y_p
+    train_stds = s_p
 
-def epanechnikov_vectorized(u):
-    """Векторная версия ядра Эпанечникова"""
-    # Результат: 3/(4*sqrt(5)) * (1 - u^2/5) если |u| < sqrt(5), иначе 0
+def epanechnikov_kernel(u):
+    """Ядро Эпанечникова Ф(u)"""
     res = (3 / (4 * SQRT5)) * (1 - (u**2) / 5)
     return np.where(np.abs(u) < SQRT5, res, 0)
 
-def W(c):
-    """Оптимизированный расчет W(c) через Numpy"""
-    global sample
+def predict_point(x_target, c):
+    """Реализация формулы 5.5 для одной точки x"""
+    # (x_target - x_i) / (c * sigma)
+    diffs = (x_target - x_train) / (c * train_stds)
+    # П Ф(...)
+    weights = np.prod(epanechnikov_kernel(diffs), axis=1)
     
-    # Выделяем целевую переменную Y и предикторы X
-    y_values = sample['Y'].values
-    # Берем все колонки кроме Y
-    x_df = sample.drop(columns=['Y'])
-    
-    # Стандартное отклонение для каждой колонки
-    stds = x_df.std().values
-    x_values = x_df.values
-    
-    n = len(y_values)
-    total_error = 0
+    sum_w = np.sum(weights)
+    if sum_w > 1e-15:
+        return np.sum(weights * y_train) / sum_w
+    else:
+        return np.mean(y_train)
 
-    # Цикл Leave-One-Out (увы, совсем без него сложно для памяти, 
-    # но внутренние расчеты теперь векторные)
+def W_loo(c):
+    """Формула 5.15: Оценка среднеквадратичной ошибки (Leave-One-Out)"""
+    n = len(y_train)
+    total_error = 0
     for j in range(n):
-        # Вычисляем разности (x_j - x_i) для всех i != j
-        # Нормируем на (c * std)
-        diffs = (x_values[j] - x_values) / (c * stds)
+        diffs = (x_train[j] - x_train) / (c * train_stds)
+        weights = np.prod(epanechnikov_kernel(diffs), axis=1)
+        weights[j] = 0 # Исключаем саму точку
         
-        # Применяем ядро к каждой компоненте вектора разностей
-        kernels = epanechnikov_vectorized(diffs)
-        
-        # Перемножаем ядра по строкам (продуктивное ядро)
-        # Исключаем текущий индекс j, зануляя его вес
-        weights = np.prod(kernels, axis=1)
-        weights[j] = 0 
-        
-        sum_weights = np.sum(weights)
-        
-        if sum_weights != 0:
-            y_hat = np.sum(weights * y_values) / sum_weights
-            total_error += (y_values[j] - y_hat) ** 2
-            
+        sum_w = np.sum(weights)
+        y_hat = np.sum(weights * y_train) / sum_w if sum_w > 1e-15 else np.mean(y_train)
+        total_error += (y_train[j] - y_hat)**2
     return total_error / n
 
-def VToWcOpt(v):
-    """Функция-обертка для Pool"""
-    c = v * 0.01
-    return [c, W(c)]
+def wrapper_opt(v):
+    c = v * 0.001 # Шаг сетки
+    return [c, W_loo(c)]
 
 def main():
-    global sample
-    
+    parser = argparse.ArgumentParser(description="Непараметрическая регрессия")
+    parser.add_argument("-d", "--data", type=str, required=True, help="Путь к Excel файлу")
+    parser.add_argument("-s", "--steps", type=int, default=1000, help="Кол-во шагов оптимизации c")
+    parser.add_argument("-p", "--proc", type=int, default=4, help="Кол-во процессов")
+    parser.add_argument("-o", "--output", type=str, default="model_params.json", help="Файл для сохранения параметров")
+    args = parser.parse_args()
+
+    # 1. Загрузка данных
     try:
-        # Загрузка данных
-        sample = pd.read_excel(DATA_PATH)
-        print("Данные загружены:")
-        print(sample.head(), '\n')
+        df = pd.read_excel(args.data)
+        y_data = df['Y'].values.astype(float)
+        x_data = df.drop(columns=['Y']).values.astype(float)
+        stds = np.std(x_data, axis=0)
+        stds[stds == 0] = 1.0 # Защита от деления на 0
     except Exception as e:
-        print(f"Ошибка при чтении файла: {e}")
+        print(f"Ошибка загрузки: {e}")
         return
 
-    # Настраиваем Pool
-    # initializer гарантирует, что переменная sample будет во всех процессах
-    num_steps = 100
-    tasks = list(range(1, num_steps + 1))
+    # 2. Оптимизация коэффициента размытости c (поиск минимума W)
+    print(f"--- Шаг 1: Оптимизация c (шагов: {args.steps}) ---")
+    with Pool(processes=args.proc, initializer=init_worker, initargs=(x_data, y_data, stds)) as p:
+        opt_results = list(tqdm(p.imap(wrapper_opt, range(1, args.steps + 1)), total=args.steps))
     
-    print(f"Запуск расчетов в 2 потока...")
-    with Pool(processes=2, initializer=init_worker, initargs=(sample,)) as p:
-        # Используем tqdm для красивого прогресс-бара
-        blur_coefs = list(tqdm(p.imap(VToWcOpt, tasks), total=num_steps))
+    best_c, min_mse = min(opt_results, key=lambda x: x[1])
+    print(f"Оптимальное c = {best_c:.4f} (MSE = {min_mse:.6f})")
 
-    # Сбор результатов
-    blur_coefs_df = pd.DataFrame(blur_coefs, columns=BLUR_COEF_OPT_COLUMNS)
+    # 3. Расчет финальной зависимости и параметров (R^2, СКО, Колмогоров)
+    print("--- Шаг 2: Расчет метрик достоверности ---")
+    init_worker(x_data, y_data, stds)
+    y_pred = np.array([predict_point(x, best_c) for x in x_data])
 
-    print('\nРезультаты оптимизации:')
-    print(blur_coefs_df.describe(), '\n')
+    # Коэффициент детерминации R^2
+    ss_res = np.sum((y_data - y_pred)**2)
+    ss_tot = np.sum((y_data - np.mean(y_data))**2)
+    r_squared = 1 - (ss_res / ss_tot)
 
-    # Сохранение
-    output_name = "wc_opt_" + DATA_PATH
-    blur_coefs_df.to_excel(output_name, index=False)
-    print(f"Файл сохранен как: {output_name}")
+    # Среднеквадратичное отклонение (RMSE)
+    rmse = math.sqrt(ss_res / len(y_data))
+
+    # Критерий Смирнова-Колмогорова (сравнение распределений y_true и y_pred)
+    ks_stat, ks_p = ks_2samp(y_data, y_pred)
+
+    # 4. Вывод и сохранение
+    results = {
+        "best_c": best_c,
+        "r_squared": r_squared,
+        "rmse": rmse,
+        "kolmogorov_stat": ks_stat,
+        "kolmogorov_p_value": ks_p,
+        "status": "Reliable" if ks_p > 0.05 else "Distributions differ"
+    }
+
+    print("\nПараметры модели:")
+    print(f"  R^2 (детерминация): {r_squared:.4f}")
+    print(f"  СКО (RMSE): {rmse:.4f}")
+    print(f"  Критерий Колм.-Смирнова: стат={ks_stat:.4f}, p-value={ks_p:.4f}")
+    
+    with open(args.output, "w") as f:
+        json.dump(results, f, indent=4)
+    print(f"\nПараметры сохранены в {args.output}")
 
 if __name__ == "__main__":
     main()
