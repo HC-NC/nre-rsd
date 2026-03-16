@@ -110,6 +110,8 @@ class NRERApp:
 			description=get_txt('desc'),
 			formatter_class=argparse.ArgumentDefaultsHelpFormatter
 		)
+
+		self.parser.add_argument("-v", "--version", action="version", version="nrer 2.0.1")
 		subparsers = self.parser.add_subparsers(dest="command")
 
 		# --- Команда TRAIN ---

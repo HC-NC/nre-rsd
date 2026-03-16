@@ -4,7 +4,22 @@ A comprehensive toolkit implementing non-parametric regression methods for stoch
 
 ---
 
+## [English](#english) | [Русский](#русский)
+
+---
+
 ## English
+
+### Contents
+- [Project Description](#project-description)
+- [Dependencies](#dependencies)
+- [Installation](#installation)
+- [User Guide](#user-guide)
+	- [General Usage](#general-usage)
+	- [Commands](#commands)
+- [Model File Format](#model-file-format)
+- [Data Format](#data-format)
+- [License](#license)
 
 ### Project Description
 
@@ -80,7 +95,7 @@ The application uses command-line interface with the following structure:
 ##### For source code
 
 ```bash
-python main.py [COMMAND] [OPTIONS]
+python nrer.py [COMMAND] [OPTIONS]
 ```
 
 ##### For nrer.exe
@@ -97,7 +112,7 @@ Train a non-parametric regression model by optimizing the blur coefficient(s).
 
 **Usage:**
 ```bash
-python main.py train <data_file> [OPTIONS]
+python nrer.py train <data_file> [OPTIONS]
 ```
 
 **Positional Arguments:**
@@ -122,7 +137,7 @@ python main.py train <data_file> [OPTIONS]
 
 **Example:**
 ```bash
-python main.py train data.xlsx -m single -k gaussian -s 150 -o my_model.json
+python nrer.py train data.xlsx -m single -k gaussian -s 150 -o my_model.json
 ```
 
 ---
@@ -133,7 +148,7 @@ Apply trained model to GeoTIFF images for data recovery and value prediction.
 
 **Usage:**
 ```bash
-python main.py apply <input_file> <model_file> [OPTIONS]
+python nrer.py apply <input_file> <model_file> [OPTIONS]
 ```
 
 **Positional Arguments:**
@@ -158,7 +173,7 @@ python main.py apply <input_file> <model_file> [OPTIONS]
 
 **Example:**
 ```bash
-python main.py apply satellite.tif my_model.json -c 0.8 -o recovered.tif -p 8
+python nrer.py apply satellite.tif my_model.json -c 0.8 -o recovered.tif -p 8
 ```
 
 ---
@@ -169,7 +184,7 @@ Generate visualizations of regression dependencies for model analysis.
 
 **Usage:**
 ```bash
-python main.py plot <model_file> [OPTIONS]
+python nrer.py plot <model_file> [OPTIONS]
 ```
 
 **Positional Arguments:**
@@ -186,7 +201,7 @@ python main.py plot <model_file> [OPTIONS]
 
 **Example:**
 ```bash
-python main.py plot my_model.json
+python nrer.py plot my_model.json
 ```
 
 ---
@@ -197,7 +212,7 @@ View and visualize GeoTIFF files before processing.
 
 **Usage:**
 ```bash
-python main.py view <input_file>
+python nrer.py view <input_file>
 ```
 
 **Positional Arguments:**
@@ -209,7 +224,7 @@ python main.py view <input_file>
 
 **Example:**
 ```bash
-python main.py view satellite.tif
+python nrer.py view satellite.tif
 ```
 
 ---
@@ -220,7 +235,7 @@ Manage application-wide settings stored in `config.json`.
 
 **Usage:**
 ```bash
-python main.py config [OPTIONS]
+python nrer.py config [OPTIONS]
 ```
 
 **Options:**
@@ -232,7 +247,7 @@ python main.py config [OPTIONS]
 
 **Example:**
 ```bash
-python main.py config -l ru -p 4
+python nrer.py config -l ru -p 4
 ```
 
 ---
@@ -242,15 +257,15 @@ python main.py config -l ru -p 4
 The model JSON file contains:
 ```json
 {
-    "data": "path/to/excel/file.xlsx",
-    "best_c": 0.5 or [0.5, 0.3, 0.2],
-    "kernel": "epanechnikov",
-    "band_count": 3,
-    "r2": 0.85,
-    "rmse": 1.23,
-    "ks_stat": 0.15,
-    "ks_p": 0.42,
-    "status": "Reliable"
+	"data": "path/to/excel/file.xlsx",
+	"best_c": 0.5 or [0.5, 0.3, 0.2],
+	"kernel": "epanechnikov",
+	"band_count": 3,
+	"r2": 0.85,
+	"rmse": 1.23,
+	"ks_stat": 0.15,
+	"ks_p": 0.42,
+	"status": "Reliable"
 }
 ```
 
@@ -275,6 +290,16 @@ Y         | X1    | X2    | X3
 ---
 
 ## Русский
+
+- [Описание проекта](#описание-проекта)
+- [Зависимости](#зависимости)
+- [Установка](#установка)
+- [Пользовательское руководство](#пользовательское-руководство)
+	- [Общее использование](#общее-использование)
+	- [Команды](#команды)
+- [Формат файла модели](#формат-файла-модели)
+- [Формат входных данных](#формат-входных-данных)
+- [License](#license)
 
 ### Описание проекта
 
@@ -350,7 +375,7 @@ pip install numpy pandas matplotlib rasterio scipy tqdm
 ##### Для исходного кода
 
 ```bash
-python main.py [КОМАНДА] [ОПЦИИ]
+python nrer.py [КОМАНДА] [ОПЦИИ]
 ```
 
 ##### Для nrer.exe
@@ -367,7 +392,7 @@ nrer.exe [КОМАНДА] [ОПЦИИ]
 
 **Использование:**
 ```bash
-python main.py train <файл_данных> [ОПЦИИ]
+python nrer.py train <файл_данных> [ОПЦИИ]
 ```
 
 **Позиционные аргументы:**
@@ -392,7 +417,7 @@ python main.py train <файл_данных> [ОПЦИИ]
 
 **Пример:**
 ```bash
-python main.py train данные.xlsx -m single -k gaussian -s 150 -o моя_модель.json
+python nrer.py train данные.xlsx -m single -k gaussian -s 150 -o моя_модель.json
 ```
 
 ---
@@ -403,7 +428,7 @@ python main.py train данные.xlsx -m single -k gaussian -s 150 -o моя_м
 
 **Использование:**
 ```bash
-python main.py apply <входной_файл> <файл_модели> [ОПЦИИ]
+python nrer.py apply <входной_файл> <файл_модели> [ОПЦИИ]
 ```
 
 **Позиционные аргументы:**
@@ -428,7 +453,7 @@ python main.py apply <входной_файл> <файл_модели> [ОПЦИ
 
 **Пример:**
 ```bash
-python main.py apply спутник.tif моя_модель.json -c 0.8 -o восстановленный.tif -p 8
+python nrer.py apply спутник.tif моя_модель.json -c 0.8 -o восстановленный.tif -p 8
 ```
 
 ---
@@ -439,7 +464,7 @@ python main.py apply спутник.tif моя_модель.json -c 0.8 -o во�
 
 **Использование:**
 ```bash
-python main.py plot <файл_модели> [ОПЦИИ]
+python nrer.py plot <файл_модели> [ОПЦИИ]
 ```
 
 **Позиционные аргументы:**
@@ -456,7 +481,7 @@ python main.py plot <файл_модели> [ОПЦИИ]
 
 **Пример:**
 ```bash
-python main.py plot моя_модель.json
+python nrer.py plot моя_модель.json
 ```
 
 ---
@@ -467,7 +492,7 @@ python main.py plot моя_модель.json
 
 **Использование:**
 ```bash
-python main.py view <входной_файл>
+python nrer.py view <входной_файл>
 ```
 
 **Позиционные аргументы:**
@@ -479,7 +504,7 @@ python main.py view <входной_файл>
 
 **Пример:**
 ```bash
-python main.py view спутник.tif
+python nrer.py view спутник.tif
 ```
 
 ---
@@ -490,7 +515,7 @@ python main.py view спутник.tif
 
 **Использование:**
 ```bash
-python main.py config [ОПЦИИ]
+python nrer.py config [ОПЦИИ]
 ```
 
 **Опции:**
@@ -502,7 +527,7 @@ python main.py config [ОПЦИИ]
 
 **Пример:**
 ```bash
-python main.py config -l ru -p 4
+python nrer.py config -l ru -p 4
 ```
 
 ---
@@ -512,15 +537,15 @@ python main.py config -l ru -p 4
 Файл JSON модели содержит:
 ```json
 {
-    "data": "путь/к/файлу/excel.xlsx",
-    "best_c": 0.5 или [0.5, 0.3, 0.2],
-    "kernel": "epanechnikov",
-    "band_count": 3,
-    "r2": 0.85,
-    "rmse": 1.23,
-    "ks_stat": 0.15,
-    "ks_p": 0.42,
-    "status": "Reliable"
+	"data": "путь/к/файлу/excel.xlsx",
+	"best_c": 0.5 или [0.5, 0.3, 0.2],
+	"kernel": "epanechnikov",
+	"band_count": 3,
+	"r2": 0.85,
+	"rmse": 1.23,
+	"ks_stat": 0.15,
+	"ks_p": 0.42,
+	"status": "Reliable"
 }
 ```
 
