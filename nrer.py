@@ -31,14 +31,15 @@ STRINGS = {
 		'h_step': 'Количество шагов при поиске по сетке',
 		'h_proc': 'Количество задействованных ядер процессора',
 		'h_crop': 'Доля фрагмента изображения (от 0.1 до 1.0)',
-		'h_model': 'Путь к JSON файлу с параметрами модели',
+		'h_model': 'Путь к JSON файлу c параметрами модели',
 		'h_input': 'Путь к исходному GeoTIFF файлу',
 		'h_lang': 'Установка языка интерфейса (ru/en)',
 		'h_tile': 'Размер тайла для обработки',
-		'h_nodata': 'Заменяет отсутствующие значения средним значением',
+		'h_nodata': 'Заменяет отсутствующие значения минимальным значением',
+		'h_show_err': 'Показать график поиска оптимального коэффициента размытости',
 		'msg_opt': 'Запуск многоядерной оптимизации...',
 		'msg_apply': 'Обработка изображения...',
-		'err_chan': 'Ошибка: Количество каналов в TIFF ({}) не совпадает с данными модели ({})!',
+		'err_chan': 'Ошибка: Количество каналов в TIFF ({}) не совпадает c данными модели ({})!',
 		'err_file': 'Ошибка: Файл не найден: {}',
 		'done': 'Операция завершена успешно.'
 	},
@@ -60,7 +61,8 @@ STRINGS = {
 		'h_input': 'Path to source GeoTIFF file',
 		'h_lang': 'Set interface language (ru/en)',
 		'h_tile': 'Processing tile size',
-		'h_nodata': 'Replaces nodata values with the mean value',
+		'h_nodata': 'Replaces nodata values with the min value',
+		'h_show_err': 'Show the graph of the search for the optimal blur coefficient',
 		'msg_opt': 'Starting multi-core optimization...',
 		'msg_apply': 'Processing image...',
 		'err_chan': 'Error: TIFF channels count ({}) does not match model data ({})!',
@@ -111,7 +113,7 @@ class NRERApp:
 			formatter_class=argparse.ArgumentDefaultsHelpFormatter
 		)
 
-		self.parser.add_argument("-v", "--version", action="version", version="nrer 2.0.1")
+		self.parser.add_argument("-v", "--version", action="version", version="nrer 2.1.0")
 		subparsers = self.parser.add_subparsers(dest="command")
 
 		# --- Команда TRAIN ---
@@ -122,6 +124,7 @@ class NRERApp:
 		tr.add_argument('-s', '--steps', type=int, default=100, help=get_txt('h_step'))
 		tr.add_argument('-p', '--proc', type=int, default=conf['proc'], help=get_txt('h_proc'))
 		tr.add_argument('-o', '--output', default='model.json', help=get_txt('h_out'))
+		tr.add_argument('-e', '--show-error', action='store_true', help=get_txt('h_show_err'))
 
 		# --- Команда APPLY ---
 		ap = subparsers.add_parser('apply', help=get_txt('h_apply'), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -134,16 +137,16 @@ class NRERApp:
 		ap.add_argument('--disable-nodata', action='store_true', help=get_txt('h_nodata'))
 
 		# --- Команда PLOT ---
-		pl = subparsers.add_parser('plot', help=get_txt('h_plot'))
+		pl = subparsers.add_parser('plot', help=get_txt('h_plot'), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 		pl.add_argument('model', help=get_txt('h_model'))
 		pl.add_argument('--disable-nodata', action='store_true', help=get_txt('h_nodata'))
 
 		# --- Команда VIEW ---
-		vi = subparsers.add_parser('view', help=get_txt('h_view'))
+		vi = subparsers.add_parser('view', help=get_txt('h_view'), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 		vi.add_argument('input', help=get_txt('h_input'))
 
 		# --- Команда CONFIG ---
-		cf = subparsers.add_parser('config', help=get_txt('h_config'))
+		cf = subparsers.add_parser('config', help=get_txt('h_config'), formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 		cf.add_argument('-l', '--lang', choices=['ru', 'en'], help=get_txt('h_lang'))
 		cf.add_argument('-p', '--proc', type=int, help=get_txt('h_proc'))
 
@@ -171,6 +174,10 @@ class NRERApp:
 				grid = np.linspace(0.01, 2.0, args.steps)
 				# Передаем имя ядра args.kernel
 				errors = [nre_lib.calc_loo_error_parallel(c, x, y, stds, args.kernel, pool) for c in tqdm(grid)]
+
+				if args.show_error:
+					plt.plot(errors)
+
 				best_c = float(grid[np.argmin(errors)])
 			else:
 				def obj(c_vec): 
@@ -200,6 +207,8 @@ class NRERApp:
 		with open(args.output, 'w', encoding='utf-8') as f: json.dump(model_data, f, indent=4, ensure_ascii=False)
 		print(f"R2: {r2:.4f}, RMSE: {rmse:.4f}, KS p-value: {ks_p:.4f}")
 		print(get_txt('done'))
+
+		plt.show()
 
 	def cmd_apply(self, args):
 		if not os.path.exists(args.model):

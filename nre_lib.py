@@ -59,5 +59,5 @@ def predict_nre(x_target, x_train, y_train, stds, c, k_func, disable_nodata=Fals
 	diffs = (x_target - x_train) / (c * stds)
 	weights = np.prod(k_func(diffs), axis=-1)
 	sw = np.sum(weights)
-	nodata = np.mean(y_train) if disable_nodata else None
+	nodata = np.min(y_train) if disable_nodata else None
 	return np.sum(weights * y_train) / sw if sw > 1e-15 else nodata
